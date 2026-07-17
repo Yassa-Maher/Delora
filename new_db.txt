@@ -1,0 +1,303 @@
+create database Delora_db;
+
+use Delora_db;
+
+-- 1. جدول المستخدمين (Users) مع تفاصيل الحساب والعناوين الإضافية و الـ Gender
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    phone VARCHAR(20) UNIQUE NOT NULL,
+    second_phone VARCHAR(20) NULL, -- التعديل: رقم هاتف ثانٍ
+    gender ENUM('male', 'female', 'other') NULL, -- التعديل: النوع
+    photo_url VARCHAR(255) NULL, -- التعديل: الصورة الشخصية
+    role ENUM('super_admin', 'store_manager', 'delivery_boy', 'customer') DEFAULT 'customer',
+    country VARCHAR(100) DEFAULT 'Egypt', -- التعديل: الدولة
+    governorate VARCHAR(100) NULL, -- التعديل: المحافظة
+    zip_code VARCHAR(20) NULL, -- التعديل: الرمز البريدي
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- عناوين الشحن التفصيلية المرتبطة باليوزر
+CREATE TABLE user_addresses (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    title VARCHAR(50) NOT NULL, -- (المنزل، العمل)
+    city VARCHAR(100) NOT NULL,
+    area VARCHAR(150) NOT NULL,
+    street_details TEXT NOT NULL,
+    building_number VARCHAR(20),
+    floor_number VARCHAR(20),
+    is_default BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 2. جدول تفاصيل الـ SEO لصفحات الموقع (SEO Details)
+CREATE TABLE seo_details (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    entity_type ENUM('product', 'category') NOT NULL, -- يحدد هل السيو لمنتج أم لقسم
+    entity_id INT NOT NULL, -- الـ id الخاص بالمنتج أو القسم
+    meta_title VARCHAR(150) NOT NULL, -- الاسم اللى بيظهر في محرك البحث
+    meta_description VARCHAR(255) NOT NULL, -- الوصف المختصر أسفل العنوان
+    meta_keywords TEXT NULL, -- الكلمات المفتاحية والرموز
+    og_title VARCHAR(150) NULL, -- العنوان عند مشاركة الرابط على السوشيال ميديا
+    og_description VARCHAR(255) NULL,
+    og_image VARCHAR(255) NULL,
+    UNIQUE(entity_type, entity_id) -- لضمان وجود سجل SEO واحد فقط لكل عنصر
+);
+
+-- 3. أقسام المنتجات (Categories)
+CREATE TABLE categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    parent_id INT NULL,
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    image_url VARCHAR(255),
+    is_active BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE SET NULL
+);
+
+-- 4. جدول المنتجات الشامل (Products)
+CREATE TABLE products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    category_id INT NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    slug VARCHAR(150) UNIQUE NOT NULL,
+    brand VARCHAR(100) NULL, -- التعديل: الماركة أو البراند
+    description TEXT,
+    wholesale_price DECIMAL(10, 2) NOT NULL, -- التعديل: سعر الجملة (لحساب صافي الربح للإدمن)
+    price DECIMAL(10, 2) NOT NULL, -- سعر البيع للمستهلك
+    comparison_price DECIMAL(10, 2) NULL, -- السعر قبل الخصم
+    sku VARCHAR(50) UNIQUE NOT NULL,
+    barcode VARCHAR(100) UNIQUE NULL,
+    unit VARCHAR(20) NOT NULL, -- (كيلو، قطعة، علبة)
+    product_image VARCHAR(255) NOT NULL, -- التعديل: الصورة الأساسية للمنتج
+    avg_rating DECIMAL(3, 2) DEFAULT 0.00, -- التعديل: متوسط التقييم الحسابي للبرودكت (مثال: 4.5)
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT
+);
+
+ALTER TABLE products 
+ADD COLUMN discount_price DECIMAL(10, 2) NULL AFTER price,                         -- سعر الخصم
+ADD COLUMN offer_start_at DATETIME NULL AFTER discount_price,                       -- تاريخ ووقت بدء العرض
+ADD COLUMN offer_end_at DATETIME NULL AFTER offer_start_at,                         -- تاريخ ووقت انتهاء العرض
+ADD COLUMN offer_until_stock_out BOOLEAN DEFAULT FALSE AFTER offer_end_at,          -- تفعيل خيار "حتى نفاذ الكمية"
+ADD COLUMN offer_max_quantity INT NULL AFTER offer_until_stock_out;                 -- كمية العرض المحددة (اختياري)
+
+
+-- صور إضافية للمنتج (لو البرودكت له أكتر من صورة في المعرض)
+CREATE TABLE product_images (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    image_url VARCHAR(255) NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+-- 5. جدول المخزون الحالي للمنتجات (Product Stock)
+CREATE TABLE product_stock (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT UNIQUE NOT NULL, -- التعديل: لمعرفة المتبقي الكلي الحالي فوراً لكل منتج
+    available_quantity INT NOT NULL DEFAULT 0, -- الكمية المتاحة للبيع حالياً
+    min_stock_level INT DEFAULT 5, -- لتنبيه الداش بورد لو نقصت عن رقم معين
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+-- حركات المخزون وتواريخ الصلاحية (مهمة للهايبر ماركت)
+CREATE TABLE inventory_batches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    batch_number VARCHAR(50) NULL,
+    quantity_received INT NOT NULL,
+    expiry_date DATE NULL, -- تاريخ انتهاء الصلاحية
+    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+-- 6. جدول التاجز الموحد (Tags) للبحث السريع
+CREATE TABLE tags (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tag_name VARCHAR(50) UNIQUE NOT NULL -- (مثال: "مجمعات", "دايت", "شيبسي")
+);
+
+-- جدول ربط التاجز بالمنتجات والأقسام (Many-to-Many Relationship)
+CREATE TABLE tagables (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tag_id INT NOT NULL,
+    entity_type ENUM('product', 'category') NOT NULL, -- التعديل: تاجز للبرودكت والكاتيجوري
+    entity_id INT NOT NULL,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE,
+    UNIQUE(tag_id, entity_type, entity_id)
+);
+
+-- 7. موديول التقييمات والمراجعات (Product Reviews)
+CREATE TABLE product_reviews (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    user_id INT NOT NULL,
+    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5), -- التعديل: الريت من 1 لـ 5
+    review_text TEXT NULL, -- التعديل: التعليق أو المراجعة المكتوبة
+    is_approved BOOLEAN DEFAULT TRUE, -- لإتاحة مراجعتها من الداش بورد قبل النشر
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(product_id, user_id) -- العميل يقيم المنتج مرة واحدة فقط لمنع التلاعب
+);
+
+-- 8. كروت المفضلة والكوبونات
+CREATE TABLE coupons (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    discount_type ENUM('fixed', 'percentage') NOT NULL,
+    discount_value DECIMAL(10, 2) NOT NULL,
+    max_discount_amount DECIMAL(10, 2) NULL,
+    min_order_amount DECIMAL(10, 2) DEFAULT 0.00,
+    usage_limit INT NULL,
+    used_count INT DEFAULT 0,
+    start_date TIMESTAMP NULL,
+    expiry_date TIMESTAMP NULL,
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE favorites (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    product_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    UNIQUE(user_id, product_id)
+);
+
+-- 9. موديول السلة والطلبات (Cart & Orders)
+CREATE TABLE cart_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    UNIQUE(user_id, product_id)
+);
+
+-- جدول الطلبات الكلي
+CREATE TABLE orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    coupon_id INT NULL,
+    subtotal DECIMAL(10, 2) NOT NULL,
+    discount_amount DECIMAL(10, 2) DEFAULT 0.00,
+    shipping_price DECIMAL(10, 2) DEFAULT 0.00, -- التعديل: مصاريف الشحن والتوصيل للطلب
+    total_amount DECIMAL(10, 2) NOT NULL, -- الصافي بعد التعديلات الحسابية
+    payment_method ENUM('cash_on_delivery', 'credit_card', 'wallet') DEFAULT 'cash_on_delivery',
+    payment_status ENUM('pending', 'paid', 'failed') DEFAULT 'pending',
+    order_status ENUM('pending', 'confirmed', 'processing', 'out_for_delivery', 'delivered', 'cancelled') DEFAULT 'pending',
+    shipping_address TEXT NOT NULL,
+    delivery_boy_id INT NULL,
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE SET NULL,
+    FOREIGN KEY (delivery_boy_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+
+-- تفاصيل عناصر الفاتورة لكل طلب
+CREATE TABLE order_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    order_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT NOT NULL,
+    price_per_unit DECIMAL(10, 2) NOT NULL, -- سعر البيع وقت الشراء
+    purchase_wholesale_price DECIMAL(10, 2) NOT NULL, -- سعر الجملة وقت الشراء (لحساب الأرباح بدقة لاحقاً في الـ Dashboard)
+    total_price DECIMAL(10, 2) NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT
+);
+
+-- 10. سجل الدعم الفني وتتبع العمليات (Logs)
+CREATE TABLE contacts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL,
+    subject VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE admin_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_id INT NOT NULL,
+    action VARCHAR(255) NOT NULL,
+    ip_address VARCHAR(45) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+
+CREATE TABLE IF NOT EXISTS site_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,                          
+    message TEXT NOT NULL,                                 
+    
+    -- وقت ظهورها للمرة الواحدة (بالثواني) أمام العميل في الجلسة الواحدة
+    display_duration_seconds INT NULL DEFAULT 10,          
+    
+    -- وقت وجود التنويهة على الموقع بشكل عام (تاريخ وساعة البدء والانتهاء)
+    start_at DATETIME NOT NULL,                           
+    expires_at DATETIME NOT NULL,                          
+    
+    is_active BOOLEAN DEFAULT TRUE,                        
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP        
+);
+
+-- إضافة جدول البانرات والسلايدر الرئيسي (Hero Banners / Slider)
+CREATE TABLE banners (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,                           -- العنوان الرئيسي (مثال: أحدث مستحضرات التجميل...)
+    subtitle VARCHAR(150) NULL,                            -- العنوان الفرعي الأخضر (مثال: إطلالة مشرقة)
+    image_url VARCHAR(255) NOT NULL,                       -- مسار صورة خلفية البانر
+    button_text VARCHAR(100) NULL DEFAULT 'اكتشفي عروضنا',  -- نص زر التوجيه (CTA)
+    
+    -- أعمدة التربيط الاختيارية لتوجيه المستخدم عند الضغط على الزر
+    product_id INT NULL,                                   -- لربطه بمنتج معين
+    category_id INT NULL,                                  -- لربطه بقسم كامل
+    
+    sort_order INT DEFAULT 0,                              -- لترتيب البانرات في السلايدر
+    is_active BOOLEAN DEFAULT TRUE,                        -- لتفعيل أو تعطيل البانر مؤقتاً
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- العلاقات والتربيط مع الجداول الموجودة مسبقاً
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+);
+
+
+
+-- أولاً: جدول الفروع المنفصل تماماً (يعرض الفروع ولينك الـ GPS ولينك صفحة الفرع)
+CREATE TABLE IF NOT EXISTS branches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,            -- اسم الفرع (مثال: فرع مدينة نصر)
+    address TEXT NULL,                     -- عنوان الفرع بالتفصيل
+    phone VARCHAR(20) NULL,                -- رقم تليفون الفرع
+    working_hours VARCHAR(150) NULL,       -- مواعيد العمل (مثال: 9 ص - 12 ص)
+    gps_link TEXT NULL,                    -- لينك الـ GPS (خرائط جوجل)
+    branch_link VARCHAR(255) NULL,         -- لينك صفحة الفرع الداخلية على موقعك
+    is_active BOOLEAN DEFAULT TRUE,        -- حالة الفرع (نشط / مغلق)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ثانياً: جدول الإعدادات المنفصل (Key-Value) لتخزين اللوجو، الديسكربشن، وروابط السوشيال ميديا بشكل مرن
+CREATE TABLE IF NOT EXISTS store_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    key_name VARCHAR(100) UNIQUE NOT NULL, -- الكود البرمجي (مثال: logo_url, facebook_url)
+    key_value TEXT NULL,                   -- القيمة (رابط اللوجو، الوصف، أو لينك السوشيال)
+    display_name VARCHAR(150) NOT NULL     -- الاسم بالعربي ليعرض في لوحة التحكم للإدمن
+);
+
