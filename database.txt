@@ -1,0 +1,357 @@
+===========================================================================
+  Delora Market - Database Schema Reference
+  Each table lists its purpose, role-based access, and column descriptions
+===========================================================================
+
+DATABASE: Delora_db
+CHARSET: utf8mb4
+
+----------------------------------------------------------------------------
+1. users — system users (customers, admins, managers, delivery boys)
+----------------------------------------------------------------------------
+   stores all user accounts with auth, profile, and verification data
+   ACCESS: register (self), profile (self), admin management
+   id             INT PK           — auto-increment
+   name           VARCHAR(150)     — full name (required)
+   email          VARCHAR(150)     — unique login email (required)
+   password_hash  VARCHAR(255)     — bcrypt hash (required)
+   phone          VARCHAR(20)      — unique phone (required)
+   second_phone   VARCHAR(20)      — optional secondary phone
+   gender         ENUM             — male / female / other
+   photo_url      VARCHAR(255)     — profile picture URL
+   role           ENUM             — super_admin / store_manager / delivery_boy / customer
+   country        VARCHAR(100)     — default 'Egypt'
+   governorate    VARCHAR(100)
+   zip_code       VARCHAR(20)
+   is_verified    BOOLEAN          — email verified via OTP
+   verification_code VARCHAR(6)    — current OTP code
+   code_expires_at DATETIME        — OTP expiry
+   is_active      BOOLEAN          — account enabled
+   created_at     TIMESTAMP
+   updated_at     TIMESTAMP
+
+----------------------------------------------------------------------------
+2. user_addresses — saved shipping addresses per user
+----------------------------------------------------------------------------
+   each customer can save multiple addresses
+   ACCESS: customer (CRUD own)
+   id             INT PK
+   user_id        INT FK → users   — address owner (CASCADE)
+   title          VARCHAR(50)      — e.g. "Home", "Work"
+   city           VARCHAR(100)
+   area           VARCHAR(150)
+   street_details TEXT
+   building_number VARCHAR(20)
+   floor_number    VARCHAR(20)
+   is_default     BOOLEAN          — default shipping address
+
+----------------------------------------------------------------------------
+3. categories — product categories (supports parent/child hierarchy)
+----------------------------------------------------------------------------
+   bilingual (Arabic/English), supports subcategories via parent_id
+   ACCESS: public (read), admin (write)
+   id             INT PK
+   parent_id      INT FK → categories — null = top-level (SET NULL on delete)
+   name_ar        VARCHAR(100)     — Arabic name (required)
+   name_en        VARCHAR(100)     — English name
+   slug           VARCHAR(100)     — unique URL-safe identifier
+   image_url      VARCHAR(255)
+   is_active      BOOLEAN
+
+----------------------------------------------------------------------------
+4. products — product catalog
+----------------------------------------------------------------------------
+   full product data with pricing, bilingual fields, and SEO support
+   ACCESS: public (read), admin (write)
+   id             INT PK
+   category_id    INT FK → categories — RESTRICT on delete
+   name_ar        VARCHAR(150)     — Arabic name (required)
+   name_en        VARCHAR(150)     — English name
+   slug           VARCHAR(150)     — unique URL slug
+   brand_ar       VARCHAR(100)
+   brand_en       VARCHAR(100)
+   description_ar TEXT
+   description_en TEXT
+    unit_ar        VARCHAR(50)      — e.g. "liter", "kg", "pack" (required)
+   unit_en        VARCHAR(50)
+   wholesale_price DECIMAL(10,2)   — cost price (required)
+   price          DECIMAL(10,2)    — selling price (required)
+   discount_price DECIMAL(10,2)    — offer price
+   offer_start_at DATETIME         — offer start
+   offer_end_at   DATETIME         — offer end
+   offer_until_stock_out BOOLEAN   — offer active while stock lasts
+   offer_max_quantity INT          — max per customer on offer
+   comparison_price DECIMAL(10,2)  — "was" price for comparison
+   sku            VARCHAR(50)      — stock keeping unit (unique, required)
+   barcode        VARCHAR(100)     — unique barcode
+   product_image  VARCHAR(255)     — main product image (required)
+   avg_rating     DECIMAL(3,2)     — auto-calculated from reviews
+   is_active      BOOLEAN
+   created_at     TIMESTAMP
+
+----------------------------------------------------------------------------
+5. product_images — additional product images (gallery)
+----------------------------------------------------------------------------
+   ACCESS: public (read), admin (write)
+   id             INT PK
+   product_id     INT FK → products — CASCADE on delete
+   image_url      VARCHAR(255)
+
+----------------------------------------------------------------------------
+6. seo_details — SEO metadata for products and categories
+----------------------------------------------------------------------------
+   one-to-one per entity (product or category)
+   ACCESS: public (read), admin (write)
+   id             INT PK
+   entity_type    ENUM             — product / category
+   entity_id      INT              — ID of the entity
+   meta_title_ar  VARCHAR(150)
+   meta_title_en  VARCHAR(150)
+   meta_description_ar VARCHAR(255)
+   meta_description_en VARCHAR(255)
+   meta_keywords_ar TEXT
+   meta_keywords_en TEXT
+   og_title_ar    VARCHAR(150)     — Open Graph title
+   og_title_en    VARCHAR(150)
+   og_description_ar VARCHAR(255)
+   og_description_en VARCHAR(255)
+   og_image       VARCHAR(255)
+   UNIQUE(entity_type, entity_id)
+
+----------------------------------------------------------------------------
+7. product_stock — current stock levels per product
+----------------------------------------------------------------------------
+   one-to-one with products; auto-triggers low-stock alerts
+   ACCESS: admin (write), system (auto-update on order)
+   id             INT PK
+   product_id     INT FK → products — unique, CASCADE on delete
+   available_quantity INT          — current stock (required)
+   min_stock_level INT             — low-stock threshold (default 5)
+   updated_at     TIMESTAMP
+
+----------------------------------------------------------------------------
+8. inventory_batches — received inventory batches (tracking)
+----------------------------------------------------------------------------
+   each incoming shipment recorded here; stock auto-updated on add/delete
+   ACCESS: admin (write)
+   id             INT PK
+   product_id     INT FK → products — CASCADE on delete
+   batch_number   VARCHAR(50)
+   quantity_received INT           — units received (required)
+   expiry_date    DATE             — for perishable goods
+   received_at    TIMESTAMP
+
+----------------------------------------------------------------------------
+9. tags — product/category labels
+----------------------------------------------------------------------------
+   bilingual tags used for filtering and search
+   ACCESS: public (read), admin (write)
+   id             INT PK
+   tag_name_ar    VARCHAR(50)      — unique Arabic tag
+   tag_name_en    VARCHAR(50)      — unique English tag
+
+----------------------------------------------------------------------------
+10. tagables — polymorphic relationship: tags ↔ products/categories
+----------------------------------------------------------------------------
+   links tags to any entity (product or category)
+   ACCESS: admin (write)
+   id             INT PK
+   tag_id         INT FK → tags    — CASCADE on delete
+   entity_type    ENUM             — product / category
+   entity_id      INT              — ID of tagged entity
+   UNIQUE(tag_id, entity_type, entity_id)
+
+----------------------------------------------------------------------------
+11. product_reviews — customer ratings and reviews
+----------------------------------------------------------------------------
+   one review per product per user; auto-updates avg_rating in products
+   ACCESS: public (read), customer (write own), admin (moderate)
+   id             INT PK
+   product_id     INT FK → products — CASCADE on delete
+   user_id        INT FK → users    — CASCADE on delete
+   rating         INT (1-5)        — CHECK constraint
+   review_text    TEXT
+   is_approved    BOOLEAN          — moderation flag (default true)
+   created_at     TIMESTAMP
+   UNIQUE(product_id, user_id)
+
+----------------------------------------------------------------------------
+12. coupons — discount codes
+----------------------------------------------------------------------------
+   supports fixed and percentage discounts with usage limits
+   ACCESS: customer (validate), admin (CRUD)
+   id             INT PK
+   code           VARCHAR(50)      — unique coupon code
+   discount_type  ENUM             — fixed / percentage
+   discount_value DECIMAL(10,2)    — amount or percent
+   max_discount_amount DECIMAL     — cap for percentage discounts
+   min_order_amount DECIMAL        — minimum order to apply (default 0)
+   usage_limit    INT              — max number of uses
+   used_count     INT              — current usage count (default 0)
+   start_date     TIMESTAMP
+   expiry_date    TIMESTAMP
+   is_active      BOOLEAN
+
+----------------------------------------------------------------------------
+13. favorites — user wishlist
+----------------------------------------------------------------------------
+   ACCESS: customer (CRUD own)
+   id             INT PK
+   user_id        INT FK → users    — CASCADE on delete
+   product_id     INT FK → products — CASCADE on delete
+   created_at     TIMESTAMP
+   UNIQUE(user_id, product_id)
+
+----------------------------------------------------------------------------
+14. cart_items — shopping cart
+----------------------------------------------------------------------------
+   temporary storage before checkout; cleared on successful order
+   ACCESS: customer (CRUD own)
+   id             INT PK
+   user_id        INT FK → users    — CASCADE on delete
+   product_id     INT FK → products — CASCADE on delete
+   quantity       INT              — default 1 (required)
+   created_at     TIMESTAMP
+   UNIQUE(user_id, product_id)
+
+----------------------------------------------------------------------------
+15. orders — customer orders
+----------------------------------------------------------------------------
+   complete order record with payment and shipping info
+   ACCESS: customer (own), admin (all)
+   id             INT PK
+   user_id        INT FK → users    — RESTRICT on delete
+   coupon_id      INT FK → coupons  — SET NULL on delete
+   subtotal       DECIMAL(10,2)    — before discounts/shipping
+   discount_amount DECIMAL(10,2)   — coupon discount applied
+   shipping_price DECIMAL(10,2)
+   total_amount   DECIMAL(10,2)    — final total
+    payment_method ENUM             — cash_on_delivery / wallet
+    payment_status ENUM             — pending / paid / failed / refunded
+    payment_reference_id VARCHAR(255)  — JSON with bank transfer details (wallet)
+    payment_proof_image TEXT            — uploaded proof image filename (wallet)
+    wallet_review_status ENUM       — pending_review / approved / rejected (wallet admin review)
+    order_status   ENUM             — pending → confirmed → processing → out_for_delivery → delivered / cancelled / completed
+   shipping_address TEXT
+   delivery_boy_id INT FK → users  — assigned delivery person, SET NULL on delete
+   order_date     TIMESTAMP
+   updated_at     TIMESTAMP
+
+----------------------------------------------------------------------------
+16. order_items — individual items within an order
+----------------------------------------------------------------------------
+   snapshot of product data at time of purchase
+   ACCESS: customer (own), admin (all)
+   id             INT PK
+   order_id       INT FK → orders   — CASCADE on delete
+   product_id     INT FK → products — RESTRICT on delete
+   quantity       INT
+   price_per_unit DECIMAL(10,2)    — price at order time
+   purchase_wholesale_price DECIMAL(10,2)
+   total_price    DECIMAL(10,2)
+
+----------------------------------------------------------------------------
+17. contacts — support/contact form submissions
+----------------------------------------------------------------------------
+   public form submissions, read/mark by admin
+   ACCESS: public (submit), admin (read/manage)
+   id             INT PK
+   name           VARCHAR(100)
+   email          VARCHAR(150)
+   subject        TEXT
+   message        TEXT
+   is_read        BOOLEAN          — admin read flag
+   created_at     TIMESTAMP
+
+----------------------------------------------------------------------------
+18. admin_logs — audit trail for admin actions
+----------------------------------------------------------------------------
+   auto-logged when admins perform key actions
+   ACCESS: super_admin (read)
+   id             INT PK
+   admin_id       INT FK → users   — CASCADE on delete
+   action         VARCHAR(255)     — description of action taken
+   ip_address     VARCHAR(45)
+   created_at     TIMESTAMP
+
+----------------------------------------------------------------------------
+19. site_notifications — time-based site-wide announcements
+----------------------------------------------------------------------------
+   scheduled notifications that display between start_at and expires_at
+   ACCESS: public (active only), admin (CRUD)
+   id             INT PK
+   title_ar       VARCHAR(150)
+   title_en       VARCHAR(150)
+   message_ar     TEXT
+   message_en     TEXT
+   display_duration_seconds INT   — how long to show (default 10)
+   start_at       DATETIME        — when to start showing
+   expires_at     DATETIME        — when to stop showing
+   is_active      BOOLEAN
+   created_at     TIMESTAMP
+
+----------------------------------------------------------------------------
+20. banners — homepage/landing page promotional banners
+----------------------------------------------------------------------------
+   sortable, linkable to products or categories
+   ACCESS: public (read), admin (CRUD)
+   id             INT PK
+   title_ar       VARCHAR(255)
+   title_en       VARCHAR(255)
+   subtitle_ar    VARCHAR(150)
+   subtitle_en    VARCHAR(150)
+   button_text_ar VARCHAR(100)    — default 'اكتشف عروضنا'
+   button_text_en VARCHAR(100)    — default 'Discover Offers'
+   image_url      VARCHAR(255)    — banner image (required)
+   product_id     INT FK → products  — optional link to product
+   category_id    INT FK → categories — optional link to category
+   sort_order     INT             — display order (default 0)
+   is_active      BOOLEAN
+   created_at     TIMESTAMP
+
+----------------------------------------------------------------------------
+21. branches — physical store locations
+----------------------------------------------------------------------------
+   bilingual address, phone, hours, and GPS link
+   ACCESS: public (read), admin (CRUD)
+   id             INT PK
+   name_ar        VARCHAR(150)
+   name_en        VARCHAR(150)
+   address_ar     TEXT
+   address_en     TEXT
+   phone          VARCHAR(20)
+   working_hours_ar VARCHAR(150)
+   working_hours_en VARCHAR(150)
+   gps_link       TEXT
+   branch_link    VARCHAR(255)
+   is_active      BOOLEAN
+   created_at     TIMESTAMP
+
+----------------------------------------------------------------------------
+22. store_settings — key-value store for app configuration
+----------------------------------------------------------------------------
+   flexible settings like store name, delivery fee, contact info
+   ACCESS: public (read), super_admin (write)
+   id             INT PK
+   key_name       VARCHAR(100)     — unique setting key
+   key_value_ar   TEXT             — Arabic value
+   key_value_en   TEXT             — English value
+   display_name_ar VARCHAR(150)    — Arabic display label
+   display_name_en VARCHAR(150)    — English display label
+
+
+===========================================================================
+  QUICK REFERENCE: Role Permissions
+===========================================================================
+  super_admin    — full access to everything
+  store_manager  — products, categories, inventory, coupons, orders, reviews, SEO
+  delivery_boy   — view assigned orders, update delivery status
+  customer       — profile, cart, orders (own), favorites, addresses, reviews
+
+===========================================================================
+  SEED ACCOUNTS (run: npm run db:seed)
+===========================================================================
+  admin@delora.market    / Admin@123456     → super_admin
+  manager@delora.market  / Admin@123456     → store_manager
+  ahmed@example.com      / Customer@123     → customer
+  sara@example.com       / Customer@123     → customer
