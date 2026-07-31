@@ -1,0 +1,4 @@
+◇ injected env (6) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+◇ injected env (0) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+📡 السيرفر شغال حالياً على بورت: http://localhost:5000
+✅ تم الاتصال بسيرفر MySQL بنجاح.. جاهز للشغل!

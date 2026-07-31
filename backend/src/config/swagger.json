@@ -1,0 +1,589 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Delora Market API",
+        "version": "1.0.0",
+        "description": "API documentation for Delora Hypermarket backend"
+    },
+    "servers": [
+        { "url": "http://localhost:5000", "description": "Local dev" }
+    ],
+    "components": {
+        "securitySchemes": {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            }
+        },
+        "schemas": {
+            "Error": {
+                "type": "object",
+                "properties": {
+                    "message": { "type": "string" },
+                    "error": { "type": "string" }
+                }
+            },
+            "Pagination": {
+                "type": "object",
+                "properties": {
+                    "page": { "type": "integer" },
+                    "limit": { "type": "integer" },
+                    "total": { "type": "integer" },
+                    "totalPages": { "type": "integer" }
+                }
+            }
+        }
+    },
+    "security": [{ "BearerAuth": [] }],
+    "paths": {
+        "/api/auth/register": {
+            "post": {
+                "tags": ["Auth"],
+                "summary": "Register new user",
+                "security": [],
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "email": { "type": "string" }, "password": { "type": "string" }, "phone": { "type": "string" }, "gender": { "type": "string", "enum": ["male","female","other"] } }, "required": ["name","email","password","phone"] } } } },
+                "responses": { "201": { "description": "User created, OTP sent" }, "400": { "description": "Validation error / email exists" } }
+            }
+        },
+        "/api/auth/login": {
+            "post": {
+                "tags": ["Auth"], "security": [],
+                "summary": "Login (returns JWT)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "email": { "type": "string" }, "password": { "type": "string" } }, "required": ["email","password"] } } } },
+                "responses": { "200": { "description": "Login success + JWT" }, "403": { "description": "Email not verified" } }
+            }
+        },
+        "/api/auth/verify-email": {
+            "post": {
+                "tags": ["Auth"], "security": [],
+                "summary": "Verify email with OTP",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "email": { "type": "string" }, "otp": { "type": "string" } }, "required": ["email","otp"] } } } },
+                "responses": { "200": { "description": "Email verified" } }
+            }
+        },
+        "/api/auth/resend-otp": {
+            "post": {
+                "tags": ["Auth"], "security": [],
+                "summary": "Resend verification OTP",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "email": { "type": "string" } }, "required": ["email"] } } } },
+                "responses": { "200": { "description": "OTP resent" } }
+            }
+        },
+        "/api/auth/forgot-password": {
+            "post": {
+                "tags": ["Auth"], "security": [],
+                "summary": "Send password reset OTP",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "email": { "type": "string" } }, "required": ["email"] } } } },
+                "responses": { "200": { "description": "Reset OTP sent" } }
+            }
+        },
+        "/api/auth/reset-password": {
+            "post": {
+                "tags": ["Auth"], "security": [],
+                "summary": "Reset password with OTP",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "email": { "type": "string" }, "otp": { "type": "string" }, "new_password": { "type": "string" } }, "required": ["email","otp","new_password"] } } } },
+                "responses": { "200": { "description": "Password reset" } }
+            }
+        },
+        "/api/auth/profile": {
+            "get": {
+                "tags": ["Auth"], "summary": "Get current user profile",
+                "responses": { "200": { "description": "User profile" } }
+            },
+            "put": {
+                "tags": ["Auth"], "summary": "Update profile (name, phone, gender)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "phone": { "type": "string" }, "gender": { "type": "string" } } } } } },
+                "responses": { "200": { "description": "Profile updated" } }
+            }
+        },
+        "/api/categories": {
+            "get": {
+                "tags": ["Categories"], "security": [],
+                "summary": "Get all active categories",
+                "responses": { "200": { "description": "Array of categories" } }
+            },
+            "post": {
+                "tags": ["Categories"],
+                "summary": "Create category (admin)",
+                "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object", "properties": { "name_ar": { "type": "string" }, "name_en": { "type": "string" }, "slug": { "type": "string" }, "parent_id": { "type": "integer" }, "image": { "type": "string", "format": "binary" } }, "required": ["name_ar","slug"] } } } },
+                "responses": { "201": { "description": "Category created" } }
+            }
+        },
+        "/api/categories/{id}": {
+            "put": {
+                "tags": ["Categories"], "summary": "Update category (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object", "properties": { "name_ar": { "type": "string" }, "slug": { "type": "string" }, "image": { "type": "string", "format": "binary" } } } } } },
+                "responses": { "200": { "description": "Updated" } }
+            },
+            "delete": {
+                "tags": ["Categories"], "summary": "Delete category (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/products": {
+            "get": {
+                "tags": ["Products"], "security": [],
+                "summary": "Get all products (paginated)",
+                "parameters": [
+                    { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+                    { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+                ],
+                "responses": { "200": { "description": "Products + pagination" } }
+            },
+            "post": {
+                "tags": ["Products"], "summary": "Create product (admin)",
+                "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object", "properties": { "category_id": { "type": "integer" }, "name_ar": { "type": "string" }, "slug": { "type": "string" }, "wholesale_price": { "type": "number" }, "price": { "type": "number" }, "sku": { "type": "string" }, "unit_ar": { "type": "string" }, "product_image": { "type": "string", "format": "binary" }, "brand_ar": { "type": "string" }, "description_ar": { "type": "string" }, "barcode": { "type": "string" } }, "required": ["category_id","name_ar","slug","wholesale_price","price","sku","unit_ar"] } } } },
+                "responses": { "201": { "description": "Created" } }
+            }
+        },
+        "/api/products/{id}": {
+            "get": {
+                "tags": ["Products"], "security": [],
+                "summary": "Get product by ID",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Product object" } }
+            },
+            "put": {
+                "tags": ["Products"], "summary": "Update product (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object", "properties": { "name_ar": { "type": "string" }, "price": { "type": "number" }, "product_image": { "type": "string", "format": "binary" } } } } } },
+                "responses": { "200": { "description": "Updated" } }
+            },
+            "delete": {
+                "tags": ["Products"], "summary": "Delete product (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/cart": {
+            "post": {
+                "tags": ["Cart"], "summary": "Add item to cart",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "product_id": { "type": "integer" }, "quantity": { "type": "integer", "default": 1 } }, "required": ["product_id"] } } } },
+                "responses": { "201": { "description": "Added" } }
+            },
+            "get": {
+                "tags": ["Cart"], "summary": "Get current user cart",
+                "responses": { "200": { "description": "Cart items" } }
+            }
+        },
+        "/api/cart/{productId}": {
+            "delete": {
+                "tags": ["Cart"], "summary": "Remove item from cart",
+                "parameters": [{ "name": "productId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/orders/checkout": {
+            "post": {
+                "tags": ["Orders"], "summary": "Checkout (cart → order)",
+                "description": "Creates order. If cash_on_delivery → pay on delivery. If wallet → user must upload payment proof after.",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": {
+                    "address": { "type": "string", "description": "Shipping address" },
+                    "phone_number": { "type": "string", "description": "Phone number" },
+                    "notes": { "type": "string", "description": "Optional order notes" },
+                    "payment_method": { "type": "string", "enum": ["cash_on_delivery","wallet"], "description": "Payment method (default: cash_on_delivery)" }
+                }, "required": ["address","phone_number"] } } } },
+                "responses": {
+                    "201": { "description": "Order created successfully" },
+                    "400": { "description": "Validation error / empty cart / insufficient stock" },
+                    "500": { "description": "Server error" }
+                }
+            }
+        },
+        "/api/orders/my-orders": {
+            "get": {
+                "tags": ["Orders"], "summary": "Get current user orders",
+                "responses": { "200": { "description": "Orders list with payment_info for wallet orders" } }
+            }
+        },
+        "/api/orders/all": {
+            "get": {
+                "tags": ["Orders"], "summary": "Get all orders (admin)",
+                "responses": { "200": { "description": "All orders with user details" } }
+            }
+        },
+        "/api/orders/payment-proof": {
+            "post": {
+                "tags": ["Orders"], "summary": "Upload bank transfer proof for wallet payment",
+                "description": "After creating a wallet order, the user fills a form with bank transfer details and uploads a proof image. Admin reviews and approves/rejects.",
+                "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object", "properties": {
+                    "order_id": { "type": "integer", "description": "Order ID (required)" },
+                    "proof_image": { "type": "string", "format": "binary", "description": "Payment proof image (optional)" },
+                    "process_number": { "type": "string", "description": "رقم العملية / Process number (required)" },
+                    "sender_phone": { "type": "string", "description": "رقم هاتف المرسل (optional)" },
+                    "sender_name": { "type": "string", "description": "اسم المرسل / Sender name (required)" },
+                    "transfer_date": { "type": "string", "description": "تاريخ التحويل / Transfer date (required)" }
+                }, "required": ["order_id","process_number","sender_name","transfer_date"] } } } },
+                "responses": {
+                    "200": { "description": "Payment proof submitted, pending admin review" },
+                    "400": { "description": "Missing required fields / invalid order / already paid / not wallet" },
+                    "403": { "description": "Order does not belong to user" },
+                    "404": { "description": "Order not found" },
+                    "500": { "description": "Server error" }
+                }
+            }
+        },
+        "/api/orders/review-wallet-payment": {
+            "put": {
+                "tags": ["Orders"], "summary": "Approve/reject wallet payment proof (admin)",
+                "description": "Admin reviews the submitted wallet payment proof and approves or rejects it",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": {
+                    "order_id": { "type": "integer", "description": "Order ID" },
+                    "action": { "type": "string", "enum": ["approve","reject"], "description": "Approve or reject the payment" }
+                }, "required": ["order_id","action"] } } } },
+                "responses": {
+                    "200": { "description": "Payment reviewed successfully" },
+                    "400": { "description": "Invalid action / not wallet payment / already reviewed" },
+                    "404": { "description": "Order not found" },
+                    "500": { "description": "Server error" }
+                }
+            }
+        },
+        "/api/orders/{id}/status": {
+            "put": {
+                "tags": ["Orders"], "summary": "Update order status (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "order_status": { "type": "string", "enum": ["pending","confirmed","processing","out_for_delivery","delivered","cancelled","completed"] }, "delivery_boy_id": { "type": "integer" } }, "required": ["order_status"] } } } },
+                "responses": { "200": { "description": "Status updated" } }
+            }
+        },
+        "/api/favorites": {
+            "post": {
+                "tags": ["Favorites"], "summary": "Add product to favorites",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "product_id": { "type": "integer" } }, "required": ["product_id"] } } } },
+                "responses": { "201": { "description": "Added" } }
+            },
+            "get": {
+                "tags": ["Favorites"], "summary": "Get user favorites",
+                "responses": { "200": { "description": "Favorites list" } }
+            }
+        },
+        "/api/favorites/{productId}": {
+            "delete": {
+                "tags": ["Favorites"], "summary": "Remove from favorites",
+                "parameters": [{ "name": "productId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Removed" } }
+            }
+        },
+        "/api/addresses": {
+            "post": {
+                "tags": ["Addresses"], "summary": "Add new address",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "title": { "type": "string" }, "city": { "type": "string" }, "area": { "type": "string" }, "street_details": { "type": "string" }, "building_number": { "type": "string" }, "floor_number": { "type": "string" }, "is_default": { "type": "boolean" } }, "required": ["title","city","area","street_details"] } } } },
+                "responses": { "201": { "description": "Address created" } }
+            },
+            "get": {
+                "tags": ["Addresses"], "summary": "Get user addresses",
+                "responses": { "200": { "description": "Addresses list" } }
+            }
+        },
+        "/api/addresses/{id}": {
+            "put": {
+                "tags": ["Addresses"], "summary": "Update address",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Updated" } }
+            },
+            "delete": {
+                "tags": ["Addresses"], "summary": "Delete address",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/reviews/product/{productId}": {
+            "get": {
+                "tags": ["Reviews"], "security": [],
+                "summary": "Get product reviews",
+                "parameters": [{ "name": "productId", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Reviews list" } }
+            }
+        },
+        "/api/reviews": {
+            "post": {
+                "tags": ["Reviews"], "summary": "Add product review",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "product_id": { "type": "integer" }, "rating": { "type": "integer", "minimum": 1, "maximum": 5 }, "review_text": { "type": "string" } }, "required": ["product_id","rating"] } } } },
+                "responses": { "201": { "description": "Review created" } }
+            }
+        },
+        "/api/reviews/{id}": {
+            "delete": {
+                "tags": ["Reviews"], "summary": "Delete own review",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/reviews/{id}/moderate": {
+            "put": {
+                "tags": ["Reviews"], "summary": "Approve/reject review (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "is_approved": { "type": "boolean" } }, "required": ["is_approved"] } } } },
+                "responses": { "200": { "description": "Moderated" } }
+            }
+        },
+        "/api/banners": {
+            "get": {
+                "tags": ["Banners"], "security": [],
+                "summary": "Get active banners",
+                "responses": { "200": { "description": "Banners list" } }
+            },
+            "post": {
+                "tags": ["Banners"], "summary": "Create banner (admin)",
+                "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object", "properties": { "title_ar": { "type": "string", "description": "Arabic title (required)" }, "title_en": { "type": "string" }, "image": { "type": "string", "format": "binary", "description": "Banner image (required)" }, "sort_order": { "type": "integer" } }, "required": ["title_ar","image"] } } } },
+                "responses": { "201": { "description": "Created" } }
+            }
+        },
+        "/api/banners/{id}": {
+            "put": {
+                "tags": ["Banners"], "summary": "Update banner (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Updated" } }
+            },
+            "delete": {
+                "tags": ["Banners"], "summary": "Delete banner (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/branches": {
+            "get": {
+                "tags": ["Branches"], "security": [],
+                "summary": "Get active branches",
+                "responses": { "200": { "description": "Branches list" } }
+            },
+            "post": {
+                "tags": ["Branches"], "summary": "Create branch (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name_ar": { "type": "string" }, "address_ar": { "type": "string" }, "phone": { "type": "string" }, "working_hours_ar": { "type": "string" } }, "required": ["name_ar","address_ar"] } } } },
+                "responses": { "201": { "description": "Created" } }
+            }
+        },
+        "/api/branches/{id}": {
+            "put": {
+                "tags": ["Branches"], "summary": "Update branch (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Updated" } }
+            },
+            "delete": {
+                "tags": ["Branches"], "summary": "Delete branch (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/coupons": {
+            "get": {
+                "tags": ["Coupons"], "summary": "Get all coupons (admin)",
+                "responses": { "200": { "description": "Coupons list" } }
+            },
+            "post": {
+                "tags": ["Coupons"], "summary": "Create coupon (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "code": { "type": "string" }, "discount_type": { "type": "string", "enum": ["fixed","percentage"] }, "discount_value": { "type": "number" }, "max_discount_amount": { "type": "number", "description": "Max discount for percentage type" }, "min_order_amount": { "type": "number", "default": 0 }, "usage_limit": { "type": "integer" }, "start_date": { "type": "string", "format": "date-time" }, "expiry_date": { "type": "string", "format": "date-time" } }, "required": ["code","discount_type","discount_value"] } } } },
+                "responses": { "201": { "description": "Created" } }
+            }
+        },
+        "/api/coupons/{id}": {
+            "put": {
+                "tags": ["Coupons"], "summary": "Update coupon (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Updated" } }
+            },
+            "delete": {
+                "tags": ["Coupons"], "summary": "Delete coupon (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/coupons/validate": {
+            "post": {
+                "tags": ["Coupons"], "summary": "Validate coupon code",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "code": { "type": "string" }, "order_total": { "type": "number" } }, "required": ["code"] } } } },
+                "responses": { "200": { "description": "Coupon valid + discount amount" } }
+            }
+        },
+        "/api/tags": {
+            "get": {
+                "tags": ["Tags"], "security": [],
+                "summary": "Get all tags",
+                "responses": { "200": { "description": "Tags list" } }
+            },
+            "post": {
+                "tags": ["Tags"], "summary": "Create tag (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "tag_name_ar": { "type": "string" }, "tag_name_en": { "type": "string" } }, "required": ["tag_name_ar"] } } } },
+                "responses": { "201": { "description": "Created" } }
+            }
+        },
+        "/api/tags/{id}": {
+            "delete": {
+                "tags": ["Tags"], "summary": "Delete tag (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/tags/attach": {
+            "post": {
+                "tags": ["Tags"], "summary": "Attach tag to entity (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "tag_id": { "type": "integer" }, "entity_type": { "type": "string", "enum": ["product","category"] }, "entity_id": { "type": "integer" } }, "required": ["tag_id","entity_type","entity_id"] } } } },
+                "responses": { "201": { "description": "Attached" } }
+            }
+        },
+        "/api/tags/detach": {
+            "post": {
+                "tags": ["Tags"], "summary": "Detach tag from entity (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "tag_id": { "type": "integer" }, "entity_type": { "type": "string", "enum": ["product","category"] }, "entity_id": { "type": "integer" } }, "required": ["tag_id","entity_type","entity_id"] } } } },
+                "responses": { "200": { "description": "Detached" } }
+            }
+        },
+        "/api/tags/entity/{entity_type}/{entity_id}": {
+            "get": {
+                "tags": ["Tags"], "security": [],
+                "summary": "Get tags for an entity",
+                "parameters": [
+                    { "name": "entity_type", "in": "path", "required": true, "schema": { "type": "string" } },
+                    { "name": "entity_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+                ],
+                "responses": { "200": { "description": "Entity tags" } }
+            }
+        },
+        "/api/contacts": {
+            "post": {
+                "tags": ["Contacts"], "security": [],
+                "summary": "Submit contact form (public)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "email": { "type": "string" }, "subject": { "type": "string" }, "message": { "type": "string" } }, "required": ["name","email","subject","message"] } } } },
+                "responses": { "201": { "description": "Message sent" } }
+            },
+            "get": {
+                "tags": ["Contacts"], "summary": "Get all messages (admin)",
+                "responses": { "200": { "description": "Messages list" } }
+            }
+        },
+        "/api/contacts/{id}/read": {
+            "put": {
+                "tags": ["Contacts"], "summary": "Mark message as read (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Marked read" } }
+            }
+        },
+        "/api/contacts/{id}": {
+            "delete": {
+                "tags": ["Contacts"], "summary": "Delete message (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/settings": {
+            "get": {
+                "tags": ["Settings"], "security": [],
+                "summary": "Get all store settings (public)",
+                "responses": { "200": { "description": "Settings list" } }
+            },
+            "put": {
+                "tags": ["Settings"], "summary": "Create/update setting (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "key_name": { "type": "string" }, "key_value_ar": { "type": "string" }, "key_value_en": { "type": "string" } }, "required": ["key_name"] } } } },
+                "responses": { "200": { "description": "Updated" } }
+            }
+        },
+        "/api/settings/{keyName}": {
+            "delete": {
+                "tags": ["Settings"], "summary": "Delete setting (admin)",
+                "parameters": [{ "name": "keyName", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/seo/{entity_type}/{entity_id}": {
+            "get": {
+                "tags": ["SEO"], "security": [],
+                "summary": "Get SEO data for entity",
+                "parameters": [
+                    { "name": "entity_type", "in": "path", "required": true, "schema": { "type": "string" } },
+                    { "name": "entity_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+                ],
+                "responses": { "200": { "description": "SEO data" } }
+            },
+            "delete": {
+                "tags": ["SEO"], "summary": "Delete SEO data (admin)",
+                "parameters": [
+                    { "name": "entity_type", "in": "path", "required": true, "schema": { "type": "string" } },
+                    { "name": "entity_id", "in": "path", "required": true, "schema": { "type": "integer" } }
+                ],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        },
+        "/api/seo": {
+            "post": {
+                "tags": ["SEO"], "summary": "Upsert SEO data (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "entity_type": { "type": "string" }, "entity_id": { "type": "integer" }, "meta_title_ar": { "type": "string" }, "meta_description_ar": { "type": "string" } }, "required": ["entity_type","entity_id","meta_title_ar","meta_description_ar"] } } } },
+                "responses": { "200": { "description": "Saved" } }
+            }
+        },
+        "/api/inventory/stock": {
+            "get": {
+                "tags": ["Inventory"], "summary": "Get stock levels (admin)",
+                "responses": { "200": { "description": "Stock list" } }
+            },
+            "put": {
+                "tags": ["Inventory"], "summary": "Update stock level (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "product_id": { "type": "integer" }, "available_quantity": { "type": "integer" }, "min_stock_level": { "type": "integer" } }, "required": ["product_id","available_quantity"] } } } },
+                "responses": { "200": { "description": "Updated" } }
+            }
+        },
+        "/api/inventory/batches": {
+            "get": {
+                "tags": ["Inventory"], "summary": "Get inventory batches (admin)",
+                "responses": { "200": { "description": "Batches list" } }
+            },
+            "post": {
+                "tags": ["Inventory"], "summary": "Add inventory batch (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "product_id": { "type": "integer" }, "batch_number": { "type": "string" }, "quantity_received": { "type": "integer" }, "expiry_date": { "type": "string" } }, "required": ["product_id","quantity_received"] } } } },
+                "responses": { "201": { "description": "Batch added + stock updated" } }
+            }
+        },
+        "/api/inventory/batches/{id}": {
+            "delete": {
+                "tags": ["Inventory"], "summary": "Delete batch (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted + stock adjusted" } }
+            }
+        },
+        "/api/logs": {
+            "get": {
+                "tags": ["Logs"], "summary": "Get admin action logs (super_admin)",
+                "parameters": [
+                    { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+                    { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+                ],
+                "responses": { "200": { "description": "Logs + pagination" } }
+            }
+        },
+        "/api/notifications/active": {
+            "get": {
+                "tags": ["Notifications"], "security": [],
+                "summary": "Get active notifications (public)",
+                "responses": { "200": { "description": "Active notifications" } }
+            }
+        },
+        "/api/notifications/all": {
+            "get": {
+                "tags": ["Notifications"], "summary": "Get all notifications (admin)",
+                "responses": { "200": { "description": "All notifications" } }
+            }
+        },
+        "/api/notifications": {
+            "post": {
+                "tags": ["Notifications"], "summary": "Create notification (admin)",
+                "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "title_ar": { "type": "string" }, "message_ar": { "type": "string" }, "start_at": { "type": "string" }, "expires_at": { "type": "string" } }, "required": ["title_ar","message_ar","start_at","expires_at"] } } } },
+                "responses": { "201": { "description": "Created" } }
+            }
+        },
+        "/api/notifications/{id}": {
+            "put": {
+                "tags": ["Notifications"], "summary": "Update notification (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Updated" } }
+            },
+            "delete": {
+                "tags": ["Notifications"], "summary": "Delete notification (admin)",
+                "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }],
+                "responses": { "200": { "description": "Deleted" } }
+            }
+        }
+    }
+}
